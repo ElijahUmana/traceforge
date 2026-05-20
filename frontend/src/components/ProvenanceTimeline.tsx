@@ -66,7 +66,7 @@ export function ProvenanceTimeline({ steps }: Props) {
     });
   };
 
-  const expandAll = () => setExpanded(new Set(steps.map((s) => s.step_number)));
+  const expandAll = () => setExpanded(new Set(steps.filter((s) => s.event_type !== "TOOL_CALL_START").map((s) => s.step_number)));
   const collapseAll = () => setExpanded(new Set());
 
   let lastAgent = "";
@@ -90,7 +90,7 @@ export function ProvenanceTimeline({ steps }: Props) {
       <div style={{ position: "relative", paddingLeft: "40px" }}>
         <div style={{ position: "absolute", left: "18px", top: "0", bottom: "0", width: "2px", background: "linear-gradient(to bottom, #3b82f6, #f97316, #22c55e)" }} />
 
-        {steps.map((step, idx) => {
+        {steps.filter((s) => s.event_type !== "TOOL_CALL_START").map((step, idx) => {
           const colors = AGENT_COLORS[step.agent_name] || { bg: "#88888820", fg: "#888", glow: "#88888840", border: "#88888850" };
           const isExpanded = expanded.has(step.step_number);
           const isAgentStart = step.event_type === "AGENT_START";
