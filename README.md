@@ -2,10 +2,6 @@
 
 **Production-grade cross-agent decision provenance on Neo4j + AWS Strands + Bedrock AgentCore.**
 
-### [Live Demo](https://6a29-2001-1890-12e7-ce0-6534-9c6-7086-ff80.ngrok-free.app) | [GitHub](https://github.com/ElijahUmana/traceforge)
-
-> **Try it now:** Run a live 3-agent credit decision swarm, then explore the provenance graph, audit report, and cost attribution — all backed by a real Neo4j Aura instance.
-
 Built at [Hack Day: Context Graphs for Multi-Agent AI](https://lu.ma/neo4j-aws-hackday) (May 19, 2026) at AWS Builder Loft SF.
 
 ## Setup
