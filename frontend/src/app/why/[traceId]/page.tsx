@@ -33,18 +33,31 @@ export default function WhyPage() {
 
   useEffect(() => {
     if (!traceId) return;
+    let interval: ReturnType<typeof setInterval> | null = null;
 
-    fetch(`/api/why/${traceId}`)
-      .then(async (res) => {
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
-          throw new Error(err.detail || `HTTP ${res.status}`);
-        }
-        return res.json();
-      })
-      .then(setData)
-      .catch((err) => setError(err.message))
-      .finally(() => setLoading(false));
+    function load() {
+      fetch(`/api/why/${traceId}`)
+        .then(async (res) => {
+          if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error(err.detail || `HTTP ${res.status}`);
+          }
+          return res.json();
+        })
+        .then((d) => {
+          setData(d);
+          setLoading(false);
+          if (d.outcome && d.outcome !== "null" && interval) {
+            clearInterval(interval);
+            interval = null;
+          }
+        })
+        .catch((err) => { setError(err.message); setLoading(false); });
+    }
+
+    load();
+    interval = setInterval(load, 5000);
+    return () => { if (interval) clearInterval(interval); };
   }, [traceId]);
 
   if (loading) {

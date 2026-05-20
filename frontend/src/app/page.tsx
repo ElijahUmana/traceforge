@@ -54,27 +54,32 @@ export default function HomePage() {
 
       if (data.decision === "PROCESSING") {
         const traceId = data.trace_id;
+        let attempts = 0;
         const poll = setInterval(async () => {
+          attempts++;
           try {
-            const r = await fetch(`/api/why/${traceId}`);
+            const r = await fetch(`/api/traces`);
             if (!r.ok) return;
-            const why = await r.json();
-            if (why.outcome && why.outcome !== "PROCESSING" && why.outcome !== "null") {
+            const tracesData = await r.json();
+            const trace = (tracesData.traces || []).find((t: any) => t.trace_id === traceId);
+            if (trace && trace.outcome && trace.outcome !== "PROCESSING" && trace.step_count > 0) {
               clearInterval(poll);
               setResult({
                 ...data,
-                outcome: why.outcome,
-                decision: why.outcome,
-                total_cost_usd: why.total_cost_usd || 0,
-                total_latency_ms: why.total_latency_ms || 0,
-                step_count: why.provenance_chain?.length || 0,
-                reasoning: `Decision: ${why.outcome}. ${why.provenance_chain?.length || 0} provenance steps captured.`,
+                outcome: trace.outcome,
+                decision: trace.outcome,
+                total_cost_usd: trace.total_cost_usd || 0,
+                total_latency_ms: trace.total_latency_ms || 0,
+                step_count: trace.step_count || 0,
+                reasoning: `Decision: ${trace.outcome}. ${trace.step_count} provenance steps captured across ${trace.agent_count} agents.`,
               });
               setLoading(false);
+            } else if (trace && trace.step_count > 0) {
+              setResult((prev) => prev ? { ...prev, step_count: trace.step_count, reasoning: `Swarm running... ${trace.step_count} steps captured so far.` } : prev);
             }
           } catch {}
-        }, 3000);
-        setTimeout(() => clearInterval(poll), 180000);
+        }, 4000);
+        setTimeout(() => { clearInterval(poll); setLoading(false); }, 180000);
         return;
       }
     } catch (err) {
