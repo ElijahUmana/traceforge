@@ -7,6 +7,8 @@ const NAV_ITEMS = [
   { href: "/", label: "Evaluate" },
   { href: "/traces", label: "Traces" },
   { href: "/cost", label: "Cost" },
+  { href: "/audit", label: "Audit" },
+  { href: "/graph", label: "Graph" },
 ];
 
 export function NavBar() {
