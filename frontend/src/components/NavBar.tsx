@@ -38,6 +38,7 @@ export function NavBar() {
           fontWeight: 700,
           color: "#7c3aed",
           letterSpacing: "-0.5px",
+          textShadow: "0 0 12px #7c3aed60",
         }}
       >
         TraceForge
