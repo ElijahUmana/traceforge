@@ -2,6 +2,10 @@
 
 **Production-grade cross-agent decision provenance on Neo4j + AWS Strands + Bedrock AgentCore.**
 
+### [Live Demo](https://6a29-2001-1890-12e7-ce0-6534-9c6-7086-ff80.ngrok-free.app) | [GitHub](https://github.com/ElijahUmana/traceforge)
+
+> **Try it now:** Run a live 3-agent credit decision swarm, then explore the provenance graph, audit report, and cost attribution — all backed by a real Neo4j Aura instance.
+
 Built at [Hack Day: Context Graphs for Multi-Agent AI](https://lu.ma/neo4j-aws-hackday) (May 19, 2026) at AWS Builder Loft SF.
 
 ---
@@ -209,6 +213,23 @@ RETURN step.agent_name AS culprit_agent,
 ```
 
 Result: *"Researcher called fetch_sec_filings at step 2 and got $150M revenue. Every downstream step — Analyst risk score, Writer memo — was built on this poisoned data."*
+
+---
+
+## Live Application
+
+**Deployed at:** [https://6a29-2001-1890-12e7-ce0-6534-9c6-7086-ff80.ngrok-free.app](https://6a29-2001-1890-12e7-ce0-6534-9c6-7086-ff80.ngrok-free.app)
+
+| Route | Description |
+|---|---|
+| [`/`](https://6a29-2001-1890-12e7-ce0-6534-9c6-7086-ff80.ngrok-free.app) | Submit a credit application to the live 3-agent swarm |
+| [`/traces`](https://6a29-2001-1890-12e7-ce0-6534-9c6-7086-ff80.ngrok-free.app/traces) | Browse all decision traces with color-coded outcomes |
+| [`/why/:id`](https://6a29-2001-1890-12e7-ce0-6534-9c6-7086-ff80.ngrok-free.app/traces) | Expandable provenance explorer with hash chain verification |
+| [`/cost`](https://6a29-2001-1890-12e7-ce0-6534-9c6-7086-ff80.ngrok-free.app/cost) | Cost attribution dashboard by agent, tool, and tenant |
+| [`/audit/:id`](https://6a29-2001-1890-12e7-ce0-6534-9c6-7086-ff80.ngrok-free.app/audit) | EU AI Act Article 12 compliance audit report |
+| [`/graph`](https://6a29-2001-1890-12e7-ce0-6534-9c6-7086-ff80.ngrok-free.app/graph) | Force-directed provenance graph visualization |
+
+**Infrastructure:** FastAPI backend + Next.js frontend served over HTTPS, connected to Neo4j Aura (cloud-hosted graph database) and Claude Sonnet 4 via Anthropic API. AgentCore deployment script included for production scaling on AWS.
 
 ---
 
