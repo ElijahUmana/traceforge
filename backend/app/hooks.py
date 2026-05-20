@@ -144,10 +144,12 @@ class ProvenanceHook(HookProvider):
 
     def _on_after_tool_call(self, event: AfterToolCallEvent) -> None:
         latency_ms = int((time.monotonic() - (self._tool_call_start or 0)) * 1000)
-        tool_name = self._current_tool_name or "unknown"
         name = getattr(event.agent, "name", None) or self._agent_name
 
-        # Extract result content from ToolResult
+        tool_name = event.tool_use.get("name", "") if hasattr(event, "tool_use") and isinstance(event.tool_use, dict) else ""
+        if not tool_name:
+            tool_name = self._current_tool_name or "unknown"
+
         result = event.result
         status = result.get("status", "success") if isinstance(result, dict) else "success"
         content_list = result.get("content", []) if isinstance(result, dict) else []
@@ -158,7 +160,7 @@ class ProvenanceHook(HookProvider):
                 if isinstance(item, dict) and "text" in item:
                     result_text += item["text"]
         if not result_text:
-            result_text = str(result)[:500]
+            result_text = str(result)[:5000]
 
         result_summary = result_text[:500]
         error_message = None
