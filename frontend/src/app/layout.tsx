@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import { Providers } from "@/components/Providers";
-import { NavBar } from "@/components/NavBar";
+import { ClientShell } from "@/components/ClientShell";
 
 export const metadata: Metadata = {
   title: "TraceForge - Cross-Agent Decision Provenance",
@@ -15,14 +14,9 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
-      <body suppressHydrationWarning>
-        <Providers>
-          <NavBar />
-          <main style={{ padding: "24px", maxWidth: "1400px", margin: "0 auto" }}>
-            {children}
-          </main>
-        </Providers>
+    <html lang="en">
+      <body>
+        <ClientShell>{children}</ClientShell>
       </body>
     </html>
   );
