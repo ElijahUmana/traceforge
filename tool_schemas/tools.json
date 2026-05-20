@@ -1,0 +1,142 @@
+[
+  {
+    "name": "fetch_sec_filings",
+    "description": "Fetch SEC 10-K annual filing data for a company. Returns revenue, net income, assets, liabilities, and key financial ratios.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "company": {"type": "string", "description": "Company name or ticker"},
+        "period": {"type": "string", "description": "Filing period, e.g. FY2025", "default": "FY2025"}
+      },
+      "required": ["company"]
+    }
+  },
+  {
+    "name": "fetch_credit_scores",
+    "description": "Fetch internal credit score and rating for a company.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "company": {"type": "string", "description": "Company name"}
+      },
+      "required": ["company"]
+    }
+  },
+  {
+    "name": "fetch_news_sentiment",
+    "description": "Fetch aggregated news sentiment score for a company (-1.0 to 1.0) and article count.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "company": {"type": "string", "description": "Company name"}
+      },
+      "required": ["company"]
+    }
+  },
+  {
+    "name": "query_knowledge_graph",
+    "description": "Query the Neo4j knowledge graph for entity relationships, past credit decisions, or similar reasoning traces.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "company": {"type": "string", "description": "Company name to search for"},
+        "query_type": {
+          "type": "string",
+          "enum": ["related_entities", "past_decisions", "similar_traces"],
+          "description": "Type of graph query",
+          "default": "related_entities"
+        }
+      },
+      "required": ["company"]
+    }
+  },
+  {
+    "name": "compute_risk_score",
+    "description": "Compute a risk score (0-100) based on financial metrics. Returns score, risk category, recommendation, and contributing factors.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "revenue": {"type": "number", "description": "Annual revenue in USD"},
+        "net_income": {"type": "number", "description": "Annual net income in USD"},
+        "debt_to_equity": {"type": "number", "description": "Debt-to-equity ratio"},
+        "current_ratio": {"type": "number", "description": "Current ratio"},
+        "credit_score": {"type": "number", "description": "Internal credit score (0-100)"},
+        "sentiment_score": {"type": "number", "description": "News sentiment (-1.0 to 1.0)"},
+        "requested_amount": {"type": "number", "description": "Credit amount requested in USD"}
+      },
+      "required": ["revenue", "net_income", "debt_to_equity", "credit_score"]
+    }
+  },
+  {
+    "name": "validate_rules",
+    "description": "Validate a credit application against business rules. Returns pass/fail per rule with steering messages for failures.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "requested_amount": {"type": "number", "description": "Credit amount requested"},
+        "debt_to_equity": {"type": "number", "description": "Debt-to-equity ratio"},
+        "credit_score": {"type": "number", "description": "Internal credit score"},
+        "risk_score": {"type": "number", "description": "Computed risk score"}
+      },
+      "required": ["requested_amount"]
+    }
+  },
+  {
+    "name": "compare_historical",
+    "description": "Compare this application against historical credit decisions for similar companies in the knowledge graph.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "company": {"type": "string", "description": "Company name"},
+        "risk_category": {"type": "string", "description": "Risk category to filter by"},
+        "requested_amount": {"type": "number", "description": "Amount to compare against"}
+      },
+      "required": ["company"]
+    }
+  },
+  {
+    "name": "draft_memo",
+    "description": "Draft a formal credit decision memo with application details, risk assessment, data sources, and EU AI Act compliance declaration.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "application_id": {"type": "string", "description": "Credit application ID"},
+        "company_name": {"type": "string", "description": "Company name"},
+        "decision": {"type": "string", "enum": ["APPROVED", "DENIED", "ESCALATED"]},
+        "risk_score": {"type": "number", "description": "Computed risk score"},
+        "risk_category": {"type": "string", "description": "LOW/MODERATE/HIGH/CRITICAL"},
+        "factors": {"type": "array", "items": {"type": "string"}, "description": "Risk factors"},
+        "reasoning": {"type": "string", "description": "Decision reasoning"},
+        "conditions": {"type": "array", "items": {"type": "string"}, "description": "Approval conditions"}
+      },
+      "required": ["application_id", "decision", "reasoning"]
+    }
+  },
+  {
+    "name": "check_compliance",
+    "description": "Check if a decision memo meets EU AI Act Article 12 compliance requirements for traceability and auditability.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "memo": {"type": "string", "description": "The drafted decision memo text"},
+        "trace_id": {"type": "string", "description": "The provenance trace ID for this decision"}
+      },
+      "required": ["memo"]
+    }
+  },
+  {
+    "name": "submit_decision",
+    "description": "Submit the final credit decision. Updates the application status and creates a DecisionMemo node in Neo4j.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "application_id": {"type": "string", "description": "Credit application ID"},
+        "decision": {"type": "string", "enum": ["APPROVED", "DENIED", "ESCALATED"]},
+        "memo": {"type": "string", "description": "Full decision memo text"},
+        "risk_score": {"type": "number", "description": "Final risk score"},
+        "conditions": {"type": "array", "items": {"type": "string"}, "description": "Conditions attached to approval"}
+      },
+      "required": ["application_id", "decision", "memo"]
+    }
+  }
+]

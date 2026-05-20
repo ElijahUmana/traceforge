@@ -1,0 +1,165 @@
+domain: financial-credit-decision
+description: "Multi-agent credit decision triage for corporate lending"
+version: "1.0"
+created: "2026-05-19"
+
+entity_types:
+  - name: Applicant
+    parent_type: Person
+    properties: [name, title, company, contact_email]
+
+  - name: Company
+    parent_type: Organization
+    properties: [name, ticker, sector, country, founded_year, employee_count, credit_score, credit_rating, sentiment_score]
+
+  - name: FinancialStatement
+    parent_type: Object
+    properties: [period, revenue, net_income, total_assets, total_liabilities, debt_to_equity, current_ratio, source, is_poisoned]
+
+  - name: CreditApplication
+    parent_type: Object
+    properties: [application_id, requested_amount, currency, application_type, status, applicant_name, company_name]
+
+  - name: RiskAssessment
+    parent_type: Object
+    properties: [risk_score, risk_category, factors, model_version]
+
+  - name: DecisionMemo
+    parent_type: Object
+    properties: [decision, reasoning, conditions, compliance_flags]
+
+  - name: DecisionRule
+    parent_type: Object
+    properties: [rule_name, action, condition_field, operator, threshold, fail_message, steer_message, severity, enabled]
+
+  - name: NewsArticle
+    parent_type: Object
+    properties: [headline, source, published_at, sentiment_score]
+
+  - name: Market
+    parent_type: Location
+    properties: [name, region, currency]
+
+relationships:
+  - type: APPLIED_FOR
+    from: Applicant
+    to: CreditApplication
+
+  - type: ON_BEHALF_OF
+    from: CreditApplication
+    to: Company
+
+  - type: HAS_FINANCIALS
+    from: Company
+    to: FinancialStatement
+
+  - type: HAS_ASSESSMENT
+    from: CreditApplication
+    to: RiskAssessment
+
+  - type: HAS_MEMO
+    from: CreditApplication
+    to: DecisionMemo
+
+  - type: OPERATES_IN
+    from: Company
+    to: Market
+
+  - type: COMPETITOR_OF
+    from: Company
+    to: Company
+
+  - type: MENTIONED_IN
+    from: Company
+    to: NewsArticle
+
+provenance_schema:
+  - type: ReasoningTrace
+    properties: [trace_id, tenant_id, session_id, task, task_embedding, outcome, success, started_at, completed_at, total_cost_usd, total_latency_ms, agent_count, step_count]
+
+  - type: ReasoningStep
+    properties: [step_id, trace_id, agent_name, agent_role, thought, action, observation, embedding, step_number, cost_usd, latency_ms, model_id, token_input, token_output, prev_hash, step_hash, status, event_type, created_at]
+
+  - type: ToolCall
+    properties: [call_id, step_id, tool_name, arguments, result, result_summary, status, duration_ms, cost_usd, error_message, created_at]
+
+provenance_relationships:
+  - type: HAS_SESSION
+    from: Tenant
+    to: Session
+
+  - type: HAS_TRACE
+    from: Session
+    to: ReasoningTrace
+
+  - type: HAS_STEP
+    from: ReasoningTrace
+    to: ReasoningStep
+
+  - type: NEXT_STEP
+    from: ReasoningStep
+    to: ReasoningStep
+
+  - type: USES_TOOL
+    from: ReasoningStep
+    to: ToolCall
+
+  - type: TOUCHED
+    from: ReasoningStep
+    to: Entity
+    properties: [access_type, timestamp]
+
+  - type: DECIDED_ON
+    from: ReasoningStep
+    to: CreditApplication
+    properties: [decision]
+
+  - type: RETRIEVED
+    from: ToolCall
+    to: FinancialStatement
+
+  - type: INITIATED_BY
+    from: ReasoningTrace
+    to: Message
+
+demo_companies:
+  - name: "Meridian Manufacturing Corp"
+    sector: "Industrial Manufacturing"
+    scenario: "clean"
+    expected_outcome: "APPROVED"
+    revenue: 85000000
+    net_income: 12000000
+    debt_to_equity: 0.45
+    current_ratio: 2.8
+    credit_score: 82
+    credit_rating: "AA-"
+    sentiment_score: 0.65
+    requested_amount: 10000000
+
+  - name: "Zenith Biotech Inc"
+    sector: "Biotechnology"
+    scenario: "poisoned"
+    expected_outcome: "WRONG APPROVE (should be DENY)"
+    real_revenue: 15000000
+    poisoned_revenue: 150000000
+    real_net_income: -3000000
+    poisoned_net_income: 25000000
+    debt_to_equity: 1.8
+    current_ratio: 0.9
+    credit_score: 41
+    credit_rating: "BB-"
+    sentiment_score: -0.3
+    requested_amount: 25000000
+
+  - name: "Atlas Logistics Group"
+    sector: "Transportation & Logistics"
+    scenario: "edge_case"
+    expected_outcome: "ESCALATED"
+    revenue: 220000000
+    net_income: 18000000
+    debt_to_equity: 0.72
+    current_ratio: 1.5
+    credit_score: 65
+    credit_rating: "BBB"
+    sentiment_score: 0.1
+    requested_amount: 50000000
