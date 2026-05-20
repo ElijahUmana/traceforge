@@ -89,13 +89,13 @@ def fetch_credit_scores(company: str) -> dict:
     """Fetch internal credit score and rating for a company."""
     driver = _get_driver()
     cypher = """
-        MATCH (org:Organization)
-        WHERE org.name CONTAINS $company
-        RETURN org.name AS company_name,
-               org.credit_score AS credit_score,
-               org.credit_rating AS credit_rating,
-               org.source AS source,
-               org.retrieved_at AS retrieved_at
+        MATCH (fs:FinancialStatement)
+        WHERE fs.company_name CONTAINS $company AND fs.data_type = 'CREDIT_SCORE'
+        RETURN fs.company_name AS company_name,
+               fs.credit_score AS credit_score,
+               fs.credit_rating AS credit_rating,
+               fs.source AS source,
+               fs.retrieved_at AS retrieved_at
         LIMIT 1
     """
     try:
@@ -128,13 +128,13 @@ def fetch_news_sentiment(company: str) -> dict:
     """Fetch aggregated news sentiment score for a company. Returns sentiment score (-1.0 to 1.0) and article count."""
     driver = _get_driver()
     cypher = """
-        MATCH (org:Organization)
-        WHERE org.name CONTAINS $company
-        RETURN org.name AS company_name,
-               org.sentiment_score AS sentiment_score,
-               org.sentiment_articles_count AS articles_count,
-               org.source AS source,
-               org.retrieved_at AS retrieved_at
+        MATCH (fs:FinancialStatement)
+        WHERE fs.company_name CONTAINS $company AND fs.data_type = 'NEWS_SENTIMENT'
+        RETURN fs.company_name AS company_name,
+               fs.sentiment_score AS sentiment_score,
+               fs.sentiment_articles_count AS articles_count,
+               fs.source AS source,
+               fs.retrieved_at AS retrieved_at
         LIMIT 1
     """
     try:
