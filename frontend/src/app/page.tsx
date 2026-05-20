@@ -155,7 +155,7 @@ export default function HomePage() {
               onClick={() => { setCompanyName("Zenith Biotech Inc"); setAmount("25000000"); }}
               style={scenarioBtn}
             >
-              Zenith Biotech ($25M) — Poisoned data demo
+              Zenith Biotech ($25M) — Poisoned data: WRONGFUL APPROVE
             </button>
             <button
               onClick={() => { setCompanyName("Atlas Logistics Group"); setAmount("50000000"); }}
