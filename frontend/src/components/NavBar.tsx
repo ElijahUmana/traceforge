@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useState, useEffect } from "react";
 
 const NAV_ITEMS = [
   { href: "/", label: "Evaluate" },
@@ -13,6 +14,11 @@ const NAV_ITEMS = [
 
 export function NavBar() {
   const pathname = usePathname();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   return (
     <nav
@@ -39,8 +45,9 @@ export function NavBar() {
 
       <div style={{ display: "flex", gap: "24px" }}>
         {NAV_ITEMS.map((item) => {
-          const isActive =
-            item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
+          const isActive = mounted
+            ? item.href === "/" ? pathname === "/" : pathname.startsWith(item.href)
+            : false;
           return (
             <Link
               key={item.href}
