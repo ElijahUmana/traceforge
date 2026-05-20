@@ -51,6 +51,32 @@ export default function HomePage() {
 
       const data: EvaluateResult = await res.json();
       setResult(data);
+
+      if (data.decision === "PROCESSING") {
+        const traceId = data.trace_id;
+        const poll = setInterval(async () => {
+          try {
+            const r = await fetch(`/api/why/${traceId}`);
+            if (!r.ok) return;
+            const why = await r.json();
+            if (why.outcome && why.outcome !== "PROCESSING" && why.outcome !== "null") {
+              clearInterval(poll);
+              setResult({
+                ...data,
+                outcome: why.outcome,
+                decision: why.outcome,
+                total_cost_usd: why.total_cost_usd || 0,
+                total_latency_ms: why.total_latency_ms || 0,
+                step_count: why.provenance_chain?.length || 0,
+                reasoning: `Decision: ${why.outcome}. ${why.provenance_chain?.length || 0} provenance steps captured.`,
+              });
+              setLoading(false);
+            }
+          } catch {}
+        }, 3000);
+        setTimeout(() => clearInterval(poll), 180000);
+        return;
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unknown error");
     } finally {
@@ -284,12 +310,25 @@ export default function HomePage() {
               border: "1px solid #7c3aed40",
             }}
           >
+            <div style={{ width: "40px", height: "40px", border: "3px solid #333", borderTopColor: "#7c3aed", borderRadius: "50%", animation: "spin 1s linear infinite", marginBottom: "16px" }} />
             <p style={{ color: "#7c3aed", fontSize: "14px", fontWeight: 600 }}>
-              Running 3-agent credit decision swarm...
+              Swarm running live...
             </p>
             <p style={{ color: "#666", fontSize: "12px", marginTop: "8px" }}>
               Researcher → Analyst → Writer
             </p>
+            <p style={{ color: "#555", fontSize: "11px", marginTop: "4px" }}>
+              10 tools, 3 agents, provenance writing to Neo4j in real time
+            </p>
+            {result?.trace_id && (
+              <a
+                href={`/why/${result.trace_id}`}
+                style={{ color: "#7c3aed", fontSize: "12px", marginTop: "12px" }}
+              >
+                Watch live: {result.trace_id}
+              </a>
+            )}
+            <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
           </div>
         )}
       </div>

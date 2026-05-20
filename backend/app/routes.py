@@ -97,7 +97,7 @@ async def evaluate(body: EvaluateRequest, request: Request):
     amount = body.requested_amount or 0.0
     app_id = body.application_id or f"APP-{datetime.now(timezone.utc).strftime('%Y')}-{uuid.uuid4().hex[:4].upper()}"
 
-    # ---- Run the real swarm ----
+    # ---- Launch the real swarm in the background, return trace_id immediately ----
     try:
         from backend.app.swarm import create_credit_decision_swarm
         from backend.app.provenance_writer import complete_trace
@@ -107,57 +107,46 @@ async def evaluate(body: EvaluateRequest, request: Request):
             f"requesting ${amount:,.0f} credit."
         )
 
-        def _run_swarm():
-            swarm, tid, sid = create_credit_decision_swarm(
-                tenant_id=tenant_id,
-                trace_id=trace_id,
-                session_id=session_id,
-            )
-            result_obj = swarm(prompt)
-            result_text = str(result_obj)
+        def _run_swarm_bg():
+            try:
+                swarm, tid, sid = create_credit_decision_swarm(
+                    tenant_id=tenant_id,
+                    trace_id=trace_id,
+                    session_id=session_id,
+                )
+                result_obj = swarm(prompt)
+                result_text = str(result_obj)
 
-            decision = "PENDING"
-            for d in ["APPROVED", "DENIED", "ESCALATED"]:
-                if d in result_text.upper():
-                    decision = d
-                    break
+                decision = "PENDING"
+                for d in ["APPROVED", "DENIED", "ESCALATED"]:
+                    if d in result_text.upper():
+                        decision = d
+                        break
 
-            complete_trace(tid, outcome=decision, success=True)
+                complete_trace(tid, outcome=decision, success=True)
+                logger.info(f"Swarm completed: {tid} -> {decision}")
+            except Exception as e:
+                logger.error(f"Background swarm failed: {e}", exc_info=True)
+                complete_trace(trace_id, outcome="FAILED", success=False)
 
-            return {
-                "trace_id": tid,
-                "decision": decision,
-                "result_text": result_text[:500],
-            }
-
-        swarm_result = await asyncio.to_thread(_run_swarm)
-
-        driver = _get_driver(request)
-        db = _get_db(request)
-        with driver.session(database=db) as session:
-            rec = session.run(
-                "MATCH (t:ReasoningTrace {trace_id: $tid}) "
-                "OPTIONAL MATCH (t)-[:HAS_STEP]->(s) "
-                "RETURN t.total_cost_usd AS cost, t.total_latency_ms AS latency, "
-                "count(s) AS steps",
-                tid=swarm_result["trace_id"],
-            ).single()
+        import threading
+        threading.Thread(target=_run_swarm_bg, daemon=True).start()
 
         return EvaluateResponse(
-            trace_id=swarm_result["trace_id"],
-            outcome=swarm_result["decision"],
-            decision=swarm_result["decision"],
+            trace_id=trace_id,
+            outcome="PROCESSING",
+            decision="PROCESSING",
             company_name=company,
             requested_amount=amount,
-            reasoning=swarm_result["result_text"],
-            total_cost_usd=rec["cost"] if rec else 0.0,
-            total_latency_ms=rec["latency"] if rec else 0,
-            step_count=rec["steps"] if rec else 0,
+            reasoning=f"Swarm launched. 3 agents evaluating {company}. Check /traces or /why/{trace_id} for live progress.",
+            total_cost_usd=0.0,
+            total_latency_ms=0,
+            step_count=0,
         )
     except Exception as exc:
-        logger.error("Swarm execution failed: %s", exc, exc_info=True)
+        logger.error("Swarm launch failed: %s", exc, exc_info=True)
 
-    # ---- Fallback stub if swarm fails ----
+    # ---- Fallback stub if swarm can't even start ----
     return await _stub_evaluate(
         request, trace_id, session_id, tenant_id, app_id, company, amount,
     )
