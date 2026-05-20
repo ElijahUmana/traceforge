@@ -97,39 +97,67 @@ async def evaluate(body: EvaluateRequest, request: Request):
     amount = body.requested_amount or 0.0
     app_id = body.application_id or f"APP-{datetime.now(timezone.utc).strftime('%Y')}-{uuid.uuid4().hex[:4].upper()}"
 
-    # ---- Try the real swarm first ----
+    # ---- Run the real swarm ----
     try:
-        from backend.app.swarm import run_credit_evaluation  # type: ignore[import-not-found]
+        from backend.app.swarm import create_credit_decision_swarm
+        from backend.app.provenance_writer import complete_trace
 
-        result = await asyncio.to_thread(
-            run_credit_evaluation,
-            application_id=app_id,
-            company_name=company,
-            requested_amount=amount,
-            tenant_id=tenant_id,
-            trace_id=trace_id,
-            session_id=session_id,
+        prompt = (
+            f"Evaluate credit application {app_id} for {company} "
+            f"requesting ${amount:,.0f} credit."
         )
+
+        def _run_swarm():
+            swarm, tid, sid = create_credit_decision_swarm(
+                tenant_id=tenant_id,
+                trace_id=trace_id,
+                session_id=session_id,
+            )
+            result_obj = swarm(prompt)
+            result_text = str(result_obj)
+
+            decision = "PENDING"
+            for d in ["APPROVED", "DENIED", "ESCALATED"]:
+                if d in result_text.upper():
+                    decision = d
+                    break
+
+            complete_trace(tid, outcome=decision, success=True)
+
+            return {
+                "trace_id": tid,
+                "decision": decision,
+                "result_text": result_text[:500],
+            }
+
+        swarm_result = await asyncio.to_thread(_run_swarm)
+
+        driver = _get_driver(request)
+        db = _get_db(request)
+        with driver.session(database=db) as session:
+            rec = session.run(
+                "MATCH (t:ReasoningTrace {trace_id: $tid}) "
+                "OPTIONAL MATCH (t)-[:HAS_STEP]->(s) "
+                "RETURN t.total_cost_usd AS cost, t.total_latency_ms AS latency, "
+                "count(s) AS steps",
+                tid=swarm_result["trace_id"],
+            ).single()
+
         return EvaluateResponse(
-            trace_id=result.get("trace_id", trace_id),
-            outcome=result.get("outcome", "COMPLETED"),
-            decision=result.get("decision", "PENDING"),
+            trace_id=swarm_result["trace_id"],
+            outcome=swarm_result["decision"],
+            decision=swarm_result["decision"],
             company_name=company,
             requested_amount=amount,
-            risk_score=result.get("risk_score"),
-            risk_category=result.get("risk_category"),
-            reasoning=result.get("reasoning", ""),
-            total_cost_usd=result.get("total_cost_usd", 0.0),
-            total_latency_ms=result.get("total_latency_ms", 0),
-            agent_count=result.get("agent_count", 3),
-            step_count=result.get("step_count", 0),
+            reasoning=swarm_result["result_text"],
+            total_cost_usd=rec["cost"] if rec else 0.0,
+            total_latency_ms=rec["latency"] if rec else 0,
+            step_count=rec["steps"] if rec else 0,
         )
-    except (ImportError, ModuleNotFoundError):
-        logger.info("Swarm module not available, using stub evaluation")
     except Exception as exc:
         logger.error("Swarm execution failed: %s", exc, exc_info=True)
 
-    # ---- Stub: write synthetic provenance to Neo4j and return mock result ----
+    # ---- Fallback stub if swarm fails ----
     return await _stub_evaluate(
         request, trace_id, session_id, tenant_id, app_id, company, amount,
     )
