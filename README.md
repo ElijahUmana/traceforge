@@ -8,6 +8,29 @@
 
 Built at [Hack Day: Context Graphs for Multi-Agent AI](https://lu.ma/neo4j-aws-hackday) (May 19, 2026) at AWS Builder Loft SF.
 
+## Setup
+
+```bash
+git clone https://github.com/ElijahUmana/traceforge.git
+cd traceforge
+
+# Configure
+cp .env.example .env
+# Fill in: NEO4J_URI, NEO4J_USERNAME, NEO4J_PASSWORD, ANTHROPIC_API_KEY
+
+# Install
+make install
+
+# Apply Neo4j schema and seed data
+make schema
+make seed
+
+# Start
+make start
+# Backend: http://localhost:8000
+# Frontend: http://localhost:3000
+```
+
 ---
 
 ## The Problem
