@@ -1,8 +1,6 @@
 # TraceForge
 
-**Production-grade cross-agent decision provenance on Neo4j + AWS Strands + Bedrock AgentCore.**
-
-Built at [Hack Day: Context Graphs for Multi-Agent AI](https://lu.ma/neo4j-aws-hackday) (May 19, 2026) at AWS Builder Loft SF.
+**Cross-agent decision provenance on Neo4j + AWS Strands + Bedrock AgentCore.**
 
 ## Setup
 
@@ -33,7 +31,7 @@ make start
 
 Multi-agent LLM systems fail at **41–86.7% rates** in production. Across 1,600+ annotated execution traces, **79% of failures** trace to a single root cause: agents share outputs but not reasoning.
 
-> Source: [Augment Code — Why Multi-Agent LLM Systems Fail](https://www.augmentcode.com/guides/why-multi-agent-llm-systems-fail-and-how-to-fix-them) (2026)
+> Reference: [Augment Code — Why Multi-Agent LLM Systems Fail](https://www.augmentcode.com/guides/why-multi-agent-llm-systems-fail-and-how-to-fix-them) (2026)
 
 When a Strands swarm of three agents makes a credit decision, no one can answer:
 
@@ -83,31 +81,31 @@ Every `:ReasoningStep` carries `cost_usd`, `latency_ms`, `model_id`, `token_inpu
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│                    Strands Swarm (GraphBuilder DAG)               │
+│                    Strands Swarm (GraphBuilder DAG)              │
 │                                                                  │
-│   ┌──────────────┐    ┌──────────────┐    ┌──────────────┐      │
-│   │  Researcher  │───▶│   Analyst    │───▶│    Writer     │      │
-│   │              │    │              │    │              │      │
-│   │ 4 tools:     │    │ 3 tools:     │    │ 3 tools:     │      │
-│   │ fetch_sec    │    │ compute_risk │    │ draft_memo   │      │
-│   │ fetch_credit │    │ validate_    │    │ check_       │      │
-│   │ fetch_news   │    │   rules      │    │  compliance  │      │
-│   │ query_kg     │    │ compare_     │    │ submit_      │      │
-│   │              │    │  historical  │    │  decision    │      │
-│   └──────────────┘    └──────────────┘    └──────────────┘      │
+│   ┌──────────────┐    ┌──────────────┐    ┌──────────────┐       │
+│   │  Researcher  │───▶│   Analyst    │───▶│    Writer    │       │
+│   │              │    │              │    │              │       │
+│   │ 4 tools:     │    │ 3 tools:     │    │ 3 tools:     │       │
+│   │ fetch_sec    │    │ compute_risk │    │ draft_memo   │       │
+│   │ fetch_credit │    │ validate_    │    │ check_       │       │
+│   │ fetch_news   │    │   rules      │    │  compliance  │       │
+│   │ query_kg     │    │ compare_     │    │ submit_      │       │
+│   │              │    │  historical  │    │  decision    │       │
+│   └──────────────┘    └──────────────┘    └──────────────┘       │
 │                                                                  │
 │   ┌──────────────────────────────────────────────────────────┐   │
-│   │                    ProvenanceHook                          │   │
-│   │  Intercepts: BeforeToolCall, AfterToolCall,               │   │
-│   │  AfterModelCall, BeforeInvocation, AfterInvocation         │   │
-│   │                                                           │   │
-│   │  Per event: capture → SHA-256 hash chain → write to Neo4j │   │
+│   │                    ProvenanceHook                        │   │
+│   │  Intercepts: BeforeToolCall, AfterToolCall,              │   │
+│   │  AfterModelCall, BeforeInvocation, AfterInvocation       │   │
+│   │                                                          │   │
+│   │  Per event: capture → SHA-256 hash chain → write to Neo4j│   │
 │   └──────────────────────────────┬───────────────────────────┘   │
 └──────────────────────────────────┼───────────────────────────────┘
                                    │
                                    ▼
                       ┌──────────────────────┐
-                      │   Neo4j Aura (bolt)   │
+                      │   Neo4j Aura (bolt)  │
                       │                      │
                       │  (:ReasoningTrace)   │
                       │    ─[:HAS_STEP]─▶    │
@@ -127,14 +125,14 @@ Every `:ReasoningStep` carries `cost_usd`, `latency_ms`, `model_id`, `token_inpu
                     │            │            │
                     ▼            ▼            ▼
               ┌──────────────────────────────────┐
-              │     Next.js Dashboard              │
-              │                                    │
-              │  /          Evaluate (live swarm)   │
-              │  /traces    Decision list           │
-              │  /why/:id   Provenance explorer     │
-              │  /cost      Cost attribution        │
-              │  /audit/:id Article 12 report       │
-              │  /graph     Force-directed viz      │
+              │     Next.js Dashboard            │
+              │                                  │
+              │  /          Evaluate (live swarm)│
+              │  /traces    Decision list        │
+              │  /why/:id   Provenance explorer  │
+              │  /cost      Cost attribution     │
+              │  /audit/:id Article 12 report    │
+              │  /graph     Force-directed viz   │
               └──────────────────────────────────┘
 ```
 
@@ -350,7 +348,7 @@ RETURN prev.step_id AS broken_after, curr.step_id AS broken_at
 
 ---
 
-## Research Foundation
+## Research
 
 - [Multi-Agent AI: Why They Fail](https://www.augmentcode.com/guides/why-multi-agent-llm-systems-fail-and-how-to-fix-them) — Augment Code, 2026. 41–86.7% failure rate, 79% from context inconsistency.
 - [VeriTrail: Detecting Hallucination and Tracing Provenance](https://www.microsoft.com/en-us/research/blog/veritrail-detecting-hallucination-and-tracing-provenance-in-multi-step-ai-workflows/) — Microsoft Research, ICLR 2026. First method for provenance tracing in multi-step AI.
