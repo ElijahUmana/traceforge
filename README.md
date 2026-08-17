@@ -224,7 +224,7 @@ backend/tests/             unit tests (offline) + integration suite
 
 ## Stack
 
-Built on [AWS Strands Agents](https://strandsagents.com) for the swarm and its lifecycle hooks, [Neo4j](https://neo4j.com) for the provenance graph, Claude via the [Anthropic API](https://docs.anthropic.com) for agent reasoning, FastAPI for the API, and Next.js for the dashboard. A deployment script for [Amazon Bedrock AgentCore](https://aws.amazon.com/bedrock/agentcore/) is included under `deploy/` as a reference path; the supported route today is running it yourself.
+Built on [AWS Strands Agents](https://strandsagents.com) for the swarm and its lifecycle hooks, [Neo4j](https://neo4j.com) for the provenance graph, Claude via the [Anthropic API](https://docs.anthropic.com) for agent reasoning, FastAPI for the API, and Next.js for the dashboard. A deployment path for [Amazon Bedrock AgentCore](https://aws.amazon.com/bedrock/agentcore/) ships under `deploy/`.
 
 ## Background
 
