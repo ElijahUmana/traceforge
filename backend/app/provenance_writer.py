@@ -16,7 +16,7 @@ Both APIs use the same Cypher from PLAN.md Section 11.1.
 import json
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from neo4j import Driver, GraphDatabase
@@ -71,7 +71,8 @@ CREATE (step:ReasoningStep {
   prev_hash: $prev_hash,
   step_hash: $step_hash,
   status: $status,
-  created_at: datetime($created_at)
+  created_at: datetime($created_at),
+  created_at_iso: $created_at_iso
 })
 
 MERGE (trace)-[:HAS_STEP {step_number: $step_number}]->(step)
@@ -219,8 +220,9 @@ def write_step(event_data: dict) -> None:
                 "token_output": event_data.get("token_output", 0),
                 "prev_hash": event_data["prev_hash"],
                 "step_hash": event_data["step_hash"],
-                "status": "COMPLETED" if "END" in event_type else "STARTED",
+                "status": event_data["status"],
                 "created_at": event_data["created_at"],
+                "created_at_iso": event_data["created_at_iso"],
                 "task": event_data.get("thought", "Credit decision evaluation"),
             }
 
@@ -293,7 +295,7 @@ def write_step(event_data: dict) -> None:
 
 def complete_trace(trace_id: str, outcome: str, success: bool) -> None:
     """Mark a trace as completed in Neo4j."""
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
 
     try:
         driver = _get_driver()
@@ -380,7 +382,7 @@ class ProvenanceWriter:
     ) -> str | None:
         """Mark a trace as completed with final outcome."""
         if completed_at is None:
-            completed_at = datetime.now(timezone.utc).isoformat()
+            completed_at = datetime.now(UTC).isoformat()
 
         try:
             with self._driver.session(database=self._database) as session:

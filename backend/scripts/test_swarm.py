@@ -4,7 +4,6 @@ Creates the swarm, evaluates a credit application, prints results,
 and verifies the provenance trace in Neo4j.
 """
 
-import json
 import logging
 import sys
 from pathlib import Path
@@ -157,7 +156,7 @@ def main():
     provenance = verify_provenance(trace_id)
 
     if provenance["found"]:
-        print(f"  Trace found:       YES")
+        print("  Trace found:       YES")
         print(f"  Steps recorded:    {provenance['step_count']}")
         print(f"  Agents observed:   {provenance['agents']}")
         print(f"  Event types:       {provenance['event_types']}")

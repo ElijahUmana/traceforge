@@ -11,7 +11,6 @@ from typing import Any
 
 from neo4j import Driver
 
-
 # --- "Why?" Query (Section 14.1) ---
 
 WHY_QUERY_CYPHER = """
@@ -397,3 +396,47 @@ def _serialize_provenance_chain(chain: list[dict]) -> list[dict]:
         })
 
     return serialized
+
+
+# --- Recomputing chain verification ---
+
+VERIFY_CHAIN_FETCH_CYPHER = """
+MATCH (trace:ReasoningTrace {trace_id: $trace_id})-[:HAS_STEP]->(step:ReasoningStep)
+RETURN step.trace_id        AS trace_id,
+       step.step_id         AS step_id,
+       step.step_number     AS step_number,
+       step.agent_name      AS agent_name,
+       step.event_type      AS event_type,
+       step.created_at_iso  AS created_at_iso,
+       step.thought         AS thought,
+       step.action          AS action,
+       step.observation     AS observation,
+       step.model_id        AS model_id,
+       step.token_input     AS token_input,
+       step.token_output    AS token_output,
+       step.cost_usd        AS cost_usd,
+       step.latency_ms      AS latency_ms,
+       step.status          AS status,
+       step.prev_hash       AS prev_hash,
+       step.step_hash       AS step_hash
+ORDER BY step.step_number
+"""
+
+
+def verify_trace_chain(
+    driver: Driver, trace_id: str, database: str = "neo4j"
+) -> dict[str, Any]:
+    """Recompute a trace's hash chain from its persisted fields.
+
+    Unlike a linkage-only check, this re-derives each step_hash from the row's
+    own content, so an edit to a stored field is detected even though every
+    prev_hash still matches its predecessor.
+    """
+    from backend.app.hashchain import verify_chain
+
+    with driver.session(database=database) as session:
+        rows = [dict(record) for record in session.run(
+            VERIFY_CHAIN_FETCH_CYPHER, trace_id=trace_id
+        )]
+
+    return verify_chain(rows)

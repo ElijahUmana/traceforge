@@ -61,7 +61,7 @@ def run_case(app_id: str, company: str, amount: int, app_type: str) -> tuple[str
         # Mark trace as completed in Neo4j
         provenance_writer.complete_trace(trace_id, outcome=outcome, success=True)
 
-        print(f"\n  Result (first 800 chars):")
+        print("\n  Result (first 800 chars):")
         print(f"  {result_text[:800]}")
         if len(result_text) > 800:
             print(f"  ... ({len(result_text)} total chars)")

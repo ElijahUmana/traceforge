@@ -9,7 +9,6 @@ Creates:
 """
 
 import os
-import sys
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -423,7 +422,7 @@ def verify_seed(session) -> None:
     """)
     record = result.single()
     if record:
-        print(f"\n  Zenith SEC filing check:")
+        print("\n  Zenith SEC filing check:")
         print(f"    revenue = ${record['revenue']:,.0f} (expected $150,000,000)")
         print(f"    net_income = ${record['net_income']:,.0f} (expected $25,000,000)")
         print(f"    is_poisoned = {record['poisoned']} (expected True)")

@@ -15,8 +15,9 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query, Request
@@ -95,12 +96,12 @@ async def evaluate(body: EvaluateRequest, request: Request):
     tenant_id = body.tenant_id or "tenant_demo"
     company = body.company_name or "Unknown Company"
     amount = body.requested_amount or 0.0
-    app_id = body.application_id or f"APP-{datetime.now(timezone.utc).strftime('%Y')}-{uuid.uuid4().hex[:4].upper()}"
+    app_id = body.application_id or f"APP-{datetime.now(UTC).strftime('%Y')}-{uuid.uuid4().hex[:4].upper()}"
 
     # ---- Launch the real swarm in the background, return trace_id immediately ----
     try:
-        from backend.app.swarm import create_credit_decision_swarm
         from backend.app.provenance_writer import complete_trace
+        from backend.app.swarm import create_credit_decision_swarm
 
         prompt = (
             f"Evaluate credit application {app_id} for {company} "
@@ -146,7 +147,27 @@ async def evaluate(body: EvaluateRequest, request: Request):
     except Exception as exc:
         logger.error("Swarm launch failed: %s", exc, exc_info=True)
 
-    # ---- Fallback stub if swarm can't even start ----
+    # The synthetic path writes fabricated steps into Neo4j under the same
+    # labels as real decisions, and once written they are indistinguishable
+    # from genuine ones. That is acceptable for an offline UI demo and not
+    # acceptable as a silent fallback, so it is opt-in and off by default —
+    # otherwise a missing dependency quietly turns this into a data generator.
+    if os.getenv("TRACEFORGE_ALLOW_SYNTHETIC_TRACES") != "1":
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "The agent swarm could not be started, so no decision was made. "
+                "Check that ANTHROPIC_API_KEY is set and that "
+                "strands-agents[anthropic] is installed. Set "
+                "TRACEFORGE_ALLOW_SYNTHETIC_TRACES=1 to emit a clearly-labelled "
+                "synthetic trace instead (offline demo only)."
+            ),
+        )
+
+    logger.warning(
+        "emitting a SYNTHETIC trace for %s — this is fabricated data, enabled by "
+        "TRACEFORGE_ALLOW_SYNTHETIC_TRACES", trace_id,
+    )
     return await _stub_evaluate(
         request, trace_id, session_id, tenant_id, app_id, company, amount,
     )
@@ -163,11 +184,10 @@ async def _stub_evaluate(
 ) -> EvaluateResponse:
     """Generate synthetic provenance data so the dashboard has content to show."""
     import hashlib
-    import time
 
     driver = _get_driver(request)
     db = _get_db(request)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     # Determine outcome based on amount thresholds (mirrors the risk model)
     if amount > 30_000_000:
@@ -183,7 +203,6 @@ async def _stub_evaluate(
         risk_score = 78.0
         risk_category = "LOW"
 
-    agents = ["Researcher", "Analyst", "Writer"]
     event_sequence = [
         # (agent, event_type, thought, action, observation, cost, latency)
         ("Researcher", "AGENT_START", f"Starting research on {company}", None, None, 0.0, 0),
@@ -235,7 +254,7 @@ async def _stub_evaluate(
         # Create trace
         tx.run(
             """
-            MERGE (trace:ReasoningTrace {trace_id: $trace_id})
+            MERGE (trace:ReasoningTrace:SyntheticTrace {trace_id: $trace_id})
             ON CREATE SET
               trace.tenant_id = $tenant_id,
               trace.session_id = $session_id,
@@ -246,7 +265,11 @@ async def _stub_evaluate(
               trace.step_count = 0,
               trace.agent_count = 3,
               trace.outcome = $outcome,
-              trace.success = true
+              trace.success = true,
+              // Fabricated data. The extra label and this flag are what keep it
+              // separable from a real decision once it is in the graph — without
+              // them a synthetic trace is indistinguishable from a genuine one.
+              trace.synthetic = true
             """,
             trace_id=trace_id,
             tenant_id=tenant_id,
@@ -489,6 +512,30 @@ RETURN
 """
 
 
+def _verify_chain(driver, trace_id: str, db: str) -> dict:
+    """Recompute a trace's hash chain, degrading to an explicit error report.
+
+    This must never raise into the /why response, but it must also never
+    report a chain as valid when it could not actually be checked — an
+    unverified chain rendered as "intact" is worse than no badge at all.
+    """
+    from backend.app.queries import verify_trace_chain
+
+    try:
+        return verify_trace_chain(driver, trace_id, database=db)
+    except Exception as exc:  # noqa: BLE001 - surfaced in the payload
+        logger.exception("hash chain verification failed for trace %s", trace_id)
+        return {
+            "valid": False,
+            "error": f"verification could not be completed: {exc}",
+            "steps_verified": 0,
+            "content_verified": 0,
+            "broken_links": [],
+            "content_mismatches": [],
+            "unverifiable_steps": [],
+        }
+
+
 @router.get("/why/{trace_id}")
 async def get_why(trace_id: str, request: Request):
     """Return the full provenance chain for a trace.
@@ -503,7 +550,8 @@ async def get_why(trace_id: str, request: Request):
         from backend.app.queries import why_query as queries_why  # type: ignore
         result = queries_why(driver, trace_id, database=db)
         if result is not None:
-            result["hash_chain_valid"] = True
+            result["hash_chain"] = _verify_chain(driver, trace_id, db)
+            result["hash_chain_valid"] = result["hash_chain"]["valid"]
             return result
     except (ImportError, ModuleNotFoundError, AttributeError):
         pass
@@ -514,6 +562,8 @@ async def get_why(trace_id: str, request: Request):
 
     if not record:
         raise HTTPException(status_code=404, detail=f"Trace {trace_id} not found")
+
+    chain_report = _verify_chain(driver, trace_id, db)
 
     chain = record["provenance_chain"]
     # Filter out null entries from the chain
@@ -535,7 +585,8 @@ async def get_why(trace_id: str, request: Request):
         "started_at": _neo4j_value(record["started_at"]),
         "completed_at": _neo4j_value(record["completed_at"]),
         "provenance_chain": clean_chain,
-        "hash_chain_valid": True,
+        "hash_chain": chain_report,
+        "hash_chain_valid": chain_report["valid"],
     }
 
 
@@ -647,7 +698,7 @@ async def audit_export(trace_id: str, request: Request):
             "retrieved_at": _neo4j_value(record["started_at"]),
         })
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     report = {
         "report": {
             "title": "EU AI Act Article 12 Compliance Report",

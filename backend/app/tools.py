@@ -7,7 +7,7 @@ All business data lives in Neo4j nodes: :FinancialStatement, :Organization,
 
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from neo4j import GraphDatabase
 from strands import tool
@@ -488,7 +488,7 @@ def draft_memo(
     conditions: list = None,
 ) -> dict:
     """Draft a formal credit decision memo with application details, risk assessment, data sources, and compliance declaration."""
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     conditions = conditions or []
 
     memo_lines = [
@@ -587,7 +587,7 @@ def submit_decision(
 ) -> dict:
     """Submit the final credit decision. Updates the application status in Neo4j and creates a :DecisionMemo node."""
     driver = _get_driver()
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     conditions = conditions or []
 
     cypher = """

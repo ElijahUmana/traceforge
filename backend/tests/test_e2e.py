@@ -1,7 +1,10 @@
 import os
+
 import pytest
-from neo4j import GraphDatabase
 from dotenv import load_dotenv
+from neo4j import GraphDatabase
+
+pytestmark = pytest.mark.integration  # needs live Neo4j + running server
 
 load_dotenv()
 

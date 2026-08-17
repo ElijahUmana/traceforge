@@ -6,26 +6,27 @@ into a durable, hash-chained provenance graph.
 Adapted for local execution: writes directly to Neo4j via provenance_writer (no SQS).
 """
 
-import hashlib
-import json
 import logging
+import os
 import time
 import uuid
-from datetime import datetime, timezone
+from collections.abc import Mapping
+from datetime import UTC, datetime
 from typing import Any
 
 from strands.hooks import HookProvider, HookRegistry
 from strands.hooks.events import (
-    AgentInitializedEvent,
     AfterInvocationEvent,
     AfterModelCallEvent,
     AfterToolCallEvent,
+    AgentInitializedEvent,
     BeforeInvocationEvent,
     BeforeModelCallEvent,
     BeforeToolCallEvent,
 )
 
 from backend.app import provenance_writer
+from backend.app.hashchain import GENESIS, compute_step_hash
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +49,7 @@ class ProvenanceHook(HookProvider):
         self.tenant_id = tenant_id
 
         self._step_counter = 0
-        self._prev_hash = "GENESIS"
+        self._prev_hash = GENESIS
         self._agent_name = "unknown"
         self._invocation_start: float | None = None
         self._tool_call_start: float | None = None
@@ -65,20 +66,11 @@ class ProvenanceHook(HookProvider):
         registry.add_callback(BeforeModelCallEvent, self._on_before_model_call)
         registry.add_callback(AfterModelCallEvent, self._on_after_model_call)
 
-    def _compute_hash(self, event_data: dict) -> str:
-        """Compute SHA-256 hash of previous hash + event data for chain integrity."""
-        payload = json.dumps(
-            {"prev_hash": self._prev_hash, **event_data},
-            sort_keys=True,
-            default=str,
-        )
-        return hashlib.sha256(payload.encode()).hexdigest()
-
     def _emit_event(self, event_type: str, data: dict, agent_name: str | None = None) -> None:
         """Write a provenance event directly to Neo4j (synchronous)."""
         self._step_counter += 1
         step_id = f"step_{uuid.uuid4().hex[:12]}"
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
 
         event_data = {
             "trace_id": self.trace_id,
@@ -89,11 +81,27 @@ class ProvenanceHook(HookProvider):
             "agent_name": agent_name or self._agent_name,
             "event_type": event_type,
             "created_at": now,
+            # Persisted verbatim so the chain stays recomputable — a Neo4j
+            # datetime round trip is not guaranteed to reproduce this text.
+            "created_at_iso": now,
             "prev_hash": self._prev_hash,
             **data,
         }
 
-        step_hash = self._compute_hash(event_data)
+        # Normalize every hashed field to the exact value that will be stored.
+        # The hash and the persisted row have to agree byte-for-byte or the
+        # chain cannot be recomputed, so the defaults live here rather than
+        # being applied independently by the writer's Cypher.
+        event_data["status"] = "COMPLETED" if "END" in event_type else "STARTED"
+        for numeric in ("cost_usd", "latency_ms", "token_input", "token_output"):
+            event_data[numeric] = event_data.get(numeric) or 0
+        for text in ("thought", "action", "observation", "model_id"):
+            event_data.setdefault(text, None)
+
+        # Hash the canonical preimage (see hashchain.HASH_FIELDS) rather than
+        # the whole event dict, so a verifier reading the persisted node can
+        # recompute this exact value and detect content edits.
+        step_hash = compute_step_hash(self._prev_hash, event_data)
         event_data["step_hash"] = step_hash
         self._prev_hash = step_hash
 
@@ -192,21 +200,25 @@ class ProvenanceHook(HookProvider):
         latency_ms = int((time.monotonic() - (self._model_call_start or 0)) * 1000)
         name = getattr(event.agent, "name", None) or self._agent_name
 
-        # Extract usage from the stop_response message if available
+        stop_reason = "unknown"
+        model_id = _resolve_model_id(event.agent)
         input_tokens = 0
         output_tokens = 0
-        stop_reason = "unknown"
-        model_id = "unknown"
 
         if event.stop_response:
             stop_reason = str(event.stop_response.stop_reason)
-            message = event.stop_response.message
-            if isinstance(message, dict):
-                usage = message.get("usage", {})
-                if isinstance(usage, dict):
-                    input_tokens = usage.get("input_tokens", 0)
-                    output_tokens = usage.get("output_tokens", 0)
-                model_id = message.get("model", "unknown")
+            input_tokens, output_tokens = extract_token_usage(
+                event.stop_response.message
+            )
+            if input_tokens == 0 and output_tokens == 0:
+                # Never let this degrade to a silent $0.00 — cost attribution
+                # is a product surface, so a missing usage block has to be
+                # visible rather than averaged into the totals as zero.
+                logger.warning(
+                    "no usage metadata on model response for trace=%s agent=%s "
+                    "stop_reason=%s — cost for this step will be recorded as 0",
+                    self.trace_id, name, stop_reason,
+                )
 
         cost_usd = _estimate_cost(input_tokens, output_tokens)
 
@@ -227,8 +239,54 @@ def _safe_serialize(obj: Any) -> dict:
     return {"raw": str(obj)[:1000]}
 
 
-def _estimate_cost(input_tokens: int, output_tokens: int) -> float:
-    """Estimate cost in USD for Claude Sonnet 4 on Anthropic API.
-    Pricing: $3/1M input, $15/1M output (May 2026).
+def extract_token_usage(message: Any) -> tuple[int, int]:
+    """Pull (input_tokens, output_tokens) out of a Strands stop-response message.
+
+    Usage is attached at ``message["metadata"]["usage"]`` and the Usage
+    TypedDict uses camelCase keys (``inputTokens`` / ``outputTokens`` /
+    ``totalTokens``). There is no top-level ``usage`` key on Message, and no
+    ``model`` key at all — reading either yields zeros for every step, which is
+    how cost attribution silently reports $0.00 across an entire trace.
     """
-    return (input_tokens * 3.0 / 1_000_000) + (output_tokens * 15.0 / 1_000_000)
+    if not isinstance(message, Mapping):
+        return 0, 0
+
+    metadata = message.get("metadata") or {}
+    if not isinstance(metadata, Mapping):
+        return 0, 0
+
+    usage = metadata.get("usage") or {}
+    if not isinstance(usage, Mapping):
+        return 0, 0
+
+    return int(usage.get("inputTokens") or 0), int(usage.get("outputTokens") or 0)
+
+
+def _resolve_model_id(agent: Any) -> str:
+    """Read the model id off the agent's model config.
+
+    Strands' Message TypedDict carries no model identifier, so the only
+    authoritative source is the model instance the agent was built with.
+    """
+    model = getattr(agent, "model", None)
+    if model is None:
+        return "unknown"
+    try:
+        model_id = model.get_config().get("model_id")
+    except Exception:  # noqa: BLE001 - provider configs vary; fall back below
+        model_id = getattr(model, "model_id", None)
+    return str(model_id) if model_id else "unknown"
+
+
+# Per-million-token rates, overridable so pricing changes don't require a code
+# change. Defaults track Claude Sonnet list pricing.
+_INPUT_COST_PER_MTOK = float(os.getenv("TRACEFORGE_INPUT_COST_PER_MTOK", "3.0"))
+_OUTPUT_COST_PER_MTOK = float(os.getenv("TRACEFORGE_OUTPUT_COST_PER_MTOK", "15.0"))
+
+
+def _estimate_cost(input_tokens: int, output_tokens: int) -> float:
+    """Estimate cost in USD from token counts."""
+    return (
+        input_tokens * _INPUT_COST_PER_MTOK / 1_000_000
+        + output_tokens * _OUTPUT_COST_PER_MTOK / 1_000_000
+    )
