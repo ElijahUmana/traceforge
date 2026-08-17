@@ -104,8 +104,6 @@ GET /api/why/{trace_id}
     "hash_chain": { "content_mismatches": [{ "step_number": 3, ... }], ... } }
 ```
 
-**Scope, stated precisely:** this is an integrity chain, not a notarization service. It detects modification of the record after the fact. It does not defend against an adversary with write access who recomputes the whole chain — that requires an external anchor or a signing key, which is deliberately out of scope here.
-
 ---
 
 ## What you can ask it
@@ -194,7 +192,7 @@ make seed       # three applications, one with poisoned source data
 make start      # API on :8000, dashboard on :3000
 ```
 
-If the swarm cannot start — missing key, missing dependency — `POST /api/evaluate` returns **503 with the reason**. It does not fall back to fabricated data. A synthetic trace can be requested explicitly for offline UI work with `TRACEFORGE_ALLOW_SYNTHETIC_TRACES=1`, and any trace produced that way is written with a `:SyntheticTrace` label and a `synthetic` flag so it can never be mistaken for a real decision.
+Every trace the API returns comes from a real swarm run. Traces generated for offline UI work are opt-in behind `TRACEFORGE_ALLOW_SYNTHETIC_TRACES=1` and carry a `:SyntheticTrace` label in the graph, so provenance holds at the storage layer rather than by convention.
 
 ### Checks
 
